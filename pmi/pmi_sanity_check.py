@@ -17,7 +17,7 @@ if __name__ == "__main__":
         from pmi import hw2_pmi as pm
 
         # Read corpus
-        corpus = pm.readFileToCorpus('movies.txt')
+        corpus = pm.readFileToCorpus('../data/movies.txt')
         pmi = pm.PMI(corpus)
         # Check PMI of 'vader' and 'luke'
         lvPMI = pmi.getPMI("luke", "vader")

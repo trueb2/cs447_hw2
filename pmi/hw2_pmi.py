@@ -1,136 +1,151 @@
-########################################
-## CS447 Natural Language Processing  ##
-##           Homework 2               ##
-##       Julia Hockenmaier            ##
-##       juliahmr@illnois.edu         ##
-########################################
-## ## Part 2:
-## Use pointwise mutual information to compare words in the movie corpora
-##
 import os.path
 import sys
-from operator import itemgetter
 from collections import defaultdict
-#----------------------------------------
-#  Data input
-#----------------------------------------
+import numpy as np
+from random import shuffle
 
-################################
-#intput:                       #
-#    f: string                 #
-#output: list of list          #
-################################
+
 # Read a text file into a corpus (list of sentences (which in turn are lists of words))
 # (taken from nested section of HW0)
 def readFileToCorpus(f):
-    """ Reads in the text file f which contains one sentence per line.
+    """
+    Reads in the text file f which contains one sentence per line.
     """
     if os.path.isfile(f):
-        file = open(f, "r") # open the input file in read-only mode
-        i = 0 # this is just a counter to keep track of the sentence numbers
-        corpus = [] # this will become a list of sentences
+        file = open(f, "r")  # open the input file in read-only mode
+        i = 0  # this is just a counter to keep track of the sentence numbers
+        corpus = []  # this will become a list of sentences
         print("Reading file %s ..." % f)
         for line in file:
             i += 1
-            sentence = line.split() # split the line into a list of words
-            corpus.append(sentence) # append this list as an element to the list of sentences
-            #if i % 1000 == 0:
-            #    sys.stderr.write("Reading sentence " + str(i) + "\n") # just a status message: str(i) turns the integer i into a string, so that we can concatenate it
+            sentence = line.split()  # split the line into a list of words
+            corpus.append(sentence)  # append this list as an element to the list of sentences
         return corpus
     else:
-        print("Error: corpus file %s does not exist" % f)  # We should really be throwing an exception here, but for simplicity's sake, this will suffice.
-        sys.exit() # exit the script
+        # We should really be throwing an exception here, but for simplicity's sake, this will suffice.
+        print("Error: corpus file %s does not exist" % f)
+        sys.exit()  # exit the script
 
-#--------------------------------------------------------------
-# PMI data structure
-#--------------------------------------------------------------
+
 class PMI:
-    ################################
-    #intput:                       #
-    #    corpus: list of list      #
-    #output: None                  #
-    ################################
-    # Given a corpus of sentences, store observations so that PMI can be calculated efficiently
     def __init__(self, corpus):
-        print("\nYour task is to add the data structures and implement the methods necessary to efficiently get the pairwise PMI of words from a corpus")
+        """
+        Given a corpus of sentences, store observations so that PMI can be calculated efficiently
+        :param corpus: list of list of strings
+        """
+        self.corpus = corpus
 
-    ################################
-    #intput:                       #
-    #    w1: string                #
-    #    w2: string                #
-    #output: float                 #
-    ################################
-    # Return the pointwise mutual information (based on sentence (co-)occurrence frequency) for w1 and w2
+        # How many tokens does the corpus contain
+        self.N = len(corpus)
+
+        # How often does w occur in the corpus
+        self.W = defaultdict(int)
+        for sen in corpus:
+            for w in sen:
+                self.W[w] += 1
+
+        # How often does w occur with c in its window (window == sentence here)
+        self.WC = defaultdict(lambda: defaultdict(int))
+        for s in corpus:
+            for w in s:
+                for c in s:
+                    if w != c:
+                        self.WC[w][c] += 1
+
+        print("Created and trained PMI instance")
+
     def getPMI(self, w1, w2):
-        print("\nSubtask 1: calculate the PMI for a pair of words")
-        return float('-inf')
+        """
+        Gets the pointwise mutual information based on sentence co-occurrence frequency for w1 and w2
+        :param w1: string word
+        :param w2: string word
+        :return: PMI
+        """
+        p_w1 = self.W[w1]
+        p_w2 = self.W[w2]
+        if p_w1 == 0 or p_w2 == 0:
+            raise Exception("Unseen word %s, %s" % ((w1, p_w1), (w2, p_w2)))
 
-    ################################
-    #intput:                       #
-    #    k: int                    #
-    #output: list                  #
-    ################################
-    # Given a frequency cutoff k, return the list of observed words that appear in at least k sentences
+        # log_2 ( p(w,c) / (p(w) * p(c)) without calculating p(...) = f(...)/N
+        p_w1_w2 = self.WC[w1][w2]
+        return np.log2(self.N * p_w1_w2 / p_w1 / p_w2) if p_w1_w2 > 0 else -np.inf
+
     def getVocabulary(self, k):
-        print("\nSubtask 2: return the list of words where a word is in the list iff it occurs in at least k sentences")
-        return ["the", "a", "to", "of", "in"]
+        """
+        Get a list of observed words that appear in at least k sentences
+        :param k: number of sentences that the words must appear in
+        :return: a list of k frequent words
+        """
+        words = [w for w in self.W if self.W[w] >= k]
+        shuffle(words)
+        print("Vocabulary aggregated with size of %d" % (len(words)))
+        return words
 
-    ################################
-    #intput:                       #
-    #    words: list               #
-    #    N: int                    #
-    #output: list of triples       #
-    ################################
-    # Given a list of words, return a list of the pairs of words that have the highest PMI
-    # (without repeated pairs, and without duplicate pairs (wi, wj) and (wj, wi)).
-    # Each entry in the list should be a triple (pmiValue, w1, w2), where pmiValue is the
-    # PMI of the pair of words (w1, w2)
     def getPairsWithMaximumPMI(self, words, N):
-        print("\nSubtask 3: given a list of words, find the pairs with the greatest PMI")
-        return [(1.0, "foo", "bar")]
+        """
+        Given a list of words, return a list of the pairs of words that have the highest PMI
+        without repeated pairs, and without duplicate pairs (wi,wj) and (wj,wi) are considered the same pair.
+        Each entry in the list should be a triple (pmiValue, w1, w2), where pmiValue is the PMI of the pair of words
+        (w1,w2)
+        :param words: list of words to consider
+        :param N: number of words to return
+        :return: list of pairs of words with the highest PMI as 3 tuple
+        """
+        # Get all of the word pairs
+        pairs = set()
+        for w1 in words:
+            for w2 in words:
+                if w1 == w2 or w1 > w2:
+                    continue
+                pairs.add(self.pair(w1, w2))
+        print("Computing maximum PMI over %d pairs" % (len(pairs)))
 
-    ################################
-    #intput:                       #
-    #    numPairs: int             #
-    #    wordPairs: list of triples#
-    #    filename: string          #
-    #output: None                  #
-    ################################
-    #-------------------------------------------
-    # Provided PMI methods
-    #-------------------------------------------
-    # Writes the first numPairs entries in the list of wordPairs to a file, along with each pair's PMI
+        # Get the PMI for all of the word pairs
+        tuples = []
+        for t in pairs:
+            tuples.append((self.getPMI(t[0], t[1]), t[0], t[1]))
+
+        # Return the N highest valued tuples as (pmiValue, w1,w2)
+        tuples.sort(reverse=True)
+        return tuples[:N]
+
     def writePairsToFile(self, numPairs, wordPairs, filename):
-        f=open(filename, 'w+')
+        """
+        Writes the first numPairs entries in the list of wordPairs to a file, along with each pair's PMI
+        :param numPairs: int
+        :param wordPairs: list of tuples
+        :param filename: string
+        :return:
+        """
+        f = open(filename, 'w+')
         count = 0
         for (pmiValue, wi, wj) in wordPairs:
             if count > numPairs:
                 break
             count += 1
-            print("%f %s %s" %(pmiValue, wi, wj), end="\n", file=f)
+            print("%f %s %s" % (pmiValue, wi, wj), end="\n", file=f)
 
-    ################################
-    #intput:                       #
-    #    w1: string                #
-    #    w2: string                #
-    #output: tuple                 #
-    ################################
-    # Helper method: given two words w1 and w2, returns the pair of words in sorted order
-    # That is: pair(w1, w2) == pair(w2, w1)
     def pair(self, w1, w2):
-        return (min(w1, w2), max(w1, w2))
+        """
+        Given two words, returns the words as a sorted tuple where w1 <= w2
+        :param w1: string
+        :param w2: string
+        :return: sorted word pair
+        """
+        return min(w1, w2), max(w1, w2)
 
-#-------------------------------------------
+
+# -------------------------------------------
 # The main routine
-#-------------------------------------------
+# -------------------------------------------
 if __name__ == "__main__":
-    corpus = readFileToCorpus('movies.txt')
+    corpus = readFileToCorpus('../data/movies.txt')
     pmi = PMI(corpus)
     lv_pmi = pmi.getPMI("luke", "vader")
     print("  PMI of \"luke\" and \"vader\": %f" % lv_pmi)
     numPairs = 100
     k = 200
-    #for k in 2, 5, 10, 50, 100, 200:
-    commonWords = pmi.getVocabulary(k)    # words must appear in least k sentences
+    # for k in 2, 5, 10, 50, 100, 200:
+    commonWords = pmi.getVocabulary(k)  # words must appear in least k sentences
     wordPairsWithGreatestPMI = pmi.getPairsWithMaximumPMI(commonWords, numPairs)
     pmi.writePairsToFile(numPairs, wordPairsWithGreatestPMI, "pairs_minFreq=%d.txt" % k)
