@@ -7,6 +7,7 @@ from collections import defaultdict
 
 UNK = 'UNK'
 
+
 # Class that stores a word and tag together
 class TaggedWord:
     def __init__(self, taggedString):
@@ -63,17 +64,13 @@ class HMM:
     def __init__(self, unknown_word_threshold=5):
         # Unknown word threshold, default value is 5 (words occurring fewer than 5 times should be treated as UNK)
         self.minFreq = unknown_word_threshold
-
-        # The tag transition probability matrix as a 2D array
-        self.A = np.ones(1)
-
-        # The word emission probability matrix as a 2D array
-        self.B = np.ones(1)
-        self.ti = {}  # The map of tag to row index in A and B
-        self.wi = {}  # The map of word to col index in B
-
-        # The initial state probability distribution as a dict
-        self.pi = np.ones(1)
+        self.K = 0  # Number of states
+        self.N = 0  # Number of observations
+        self.A = np.zeros(0)  # transition matrix, k * k
+        self.B = np.zeros(0)  # emission matrix, k * n
+        self.PI = np.zeros(0)  # initial state probabilities
+        self.state_index = {}  # maps index to state tag
+        self.reverse_observation_index = {}  # maps word observation to index
 
     def train(self, trainFile):
         """
@@ -82,75 +79,80 @@ class HMM:
         matrix, and pi, the initial state probability dict, are populated from the distribution in the corpus.
         :param trainFile: the file with the corpus
         """
-
         # Read the corpus
         data = self.read_labeled_data(trainFile)
 
-        # Count the number of times each word and each tag appears
-        wc = defaultdict(lambda: defaultdict(int))
-        tc = defaultdict(int)
-        pi = defaultdict(float)
-        count_key = "__COUNT__"
+        # Count tag states and word observations in labeled corpus
+        a = defaultdict(lambda: defaultdict(int))
+        b = defaultdict(lambda: defaultdict(int))
+        p = defaultdict(int)
+        cw = defaultdict(int)
+        t = "."
         for sen in data:
-            pi[sen[0].tag] += 1
+            p[sen[0].tag] += 1
             for tw in sen:
-                wc[tw.word][count_key] += 1
-                wc[tw.word][tw.tag] += 1
-                tc[tw.tag] += 1
+                a[t][tw.tag] += 1  # Count tag bigrams
+                b[tw.word][tw.tag] += 1  # Count tag word emission
+                cw[tw.word] += 1  # Count the number  of occurrences of word
+                t = tw.tag  # Track previous tag
 
-        # Compute the probabilities from the counts for the initial states
+        # Collect the tags for rare words and consolidate them in b under UNK
+        ut = defaultdict(int)
+        for w in cw:
+            if cw[w] < self.minFreq:
+                for t in b[w]:
+                    ut[t] += b[w][t]
+                del b[w]
+        b[UNK] = ut
+
+        # Set the size constants and allocate space for probability matrices
+        self.K = len(a)
+        self.N = len(b)
+        self.A = np.zeros((self.K, self.K))
+        self.B = np.zeros((self.K, self.N))
+        self.PI = np.zeros(self.K)
+
+        # Generate the indices for states and observations
+        reverse_state_index = {}
+        for i, t in enumerate(a):
+            reverse_state_index[t] = i
+            self.state_index[i] = t
+
+        for i, w in enumerate(b):
+            self.reverse_observation_index[w] = i
+
+        # Compute the initial state probabilities
         num_sen = len(data)
-        for t in pi:
-            pi[t] /= num_sen
+        for t0 in p:
+            self.PI[reverse_state_index[t0]] += p[t0] / num_sen
+        self.PI = np.log(self.PI)
 
-        # Consolidate infrequent words
-        unkc = defaultdict(int)
-        rare = []
-        for w in wc:
-            c = wc[w]
-            if c[count_key] < self.minFreq:
-                for t in c:
-                    unkc[t] += c[t]
-                del unkc[count_key]
-                rare.append(w)
-            del wc[w][count_key]
-        wc[UNK] = unkc
-        for rw in rare:
-            del wc[rw]
+        # Compute the transition probabilities
+        for t0 in a:
+            i = reverse_state_index[t0]
+            for t1 in a[t0]:
+                j = reverse_state_index[t1]
+                self.A[i, j] += a[t0][t1]
 
-        # Count the word emissions for each tag
-        self.B = np.ones((len(tc), len(wc)))
-        self.ti = {tag: i for i, tag in enumerate(tc)}
-        self.wi = {word: j for j, word in enumerate(wc)}
-        m, n = self.B.shape
-        for w in wc:
-            word_tags = wc[w]
-            j = self.wi[w]
-            for t in word_tags:
-                i = self.ti[t]
-                self.B[i, j] += word_tags[t]
+        # Laplacian smoothing
+        self.A += 1
+        for i in range(self.K):
+            self.A[i, :] /= sum(self.A[i, :])
+        self.A = np.log(self.A)
 
-        # Compute the smoothed emission probabilities as a trellis
-        for i in range(m):
+        # Compute the emission probabilities
+        for w in b:
+            j = self.reverse_observation_index[w]
+            for t in b[w]:
+                i = reverse_state_index[t]
+                self.B[i, j] += b[w][t]
+
+        # Laplacian smoothing
+        self.B += 1
+        for i in range(self.K):
             self.B[i, :] /= sum(self.B[i, :])
+        self.B = np.log(self.B)
 
-        # Count the tag bigrams
-        self.A = np.ones((m, m))
-        i = self.ti["."]
-        for sen in data:
-            for tw in sen:
-                j = self.ti[tw.tag]
-                self.A[i, j] += 1
-                i = j
-
-        # Compute the smoothed transition probabilities
-        for i in range(m):
-            self.A[i, :] /= self.A[i, :]
-
-        # Organize initial states probabilities by tag index
-        self.pi = np.zeros(m)
-        for t in pi:
-            self.pi[self.ti[t]] = pi[t]
 
     def test(self, testFile, outFile):
         """
@@ -175,48 +177,41 @@ class HMM:
         :param words: list of string words
         :return: tagged_words: a list of tags according the trained HMM
         """
-        # Replace unknown words
-        for i in range(len(words)):
-            if not words[i] in self.wi:
-                words[i] = UNK
+        # Create the memoization structures
+        T1 = np.zeros((self.K, len(words)))
+        T2 = np.zeros_like(T1, dtype=int)
 
-        # Initialize structures
-        m, n = self.B.shape
-        n = len(words)
-        path = np.zeros((m, n), dtype=int)
-        viterbi = np.zeros((m, n))
+        # Replace unknown words and map to indices in HMM structures
+        w = list(words)
+        for i in range(len(w)):
+            if w[i] not in self.reverse_observation_index:
+                w[i] = self.reverse_observation_index[UNK]
+            else:
+                w[i] = self.reverse_observation_index[w[i]]
 
-        # Initialize first column using starting probabilities from pi
-        viterbi[:, 0] = self.pi * self.B[:, self.wi[words[0]]]
+        # Initialize the first column using the initial state probability
+        T1[:, 0] = self.PI + self.B[:, w[0]]
+        T2[:, 0] = 0
 
-        # Iterate over remaining columns
-        for i in range(1, len(words)):
-            for t in range(m):
-                for t_ in range(m):
-                    tmp = viterbi[t, i - 1] * self.A[t, t_]
-                    if tmp > viterbi[t, i]:
-                        viterbi[t, i] = tmp
-                        path[t, i] = t_
-                viterbi[t, i] *= self.B[t, self.wi[words[i]]]
+        # Iterate over the columns of T1 and T2
+        for i in range(1, len(w)):
+            wi = w[i]  # Column index of word in B
+            for j in range(self.K):
+                p = T1[:, i - 1] + self.A[:, j]  # State probability * transition probability of previous col
+                k = np.argmax(p)  # State with max path probability in previous col
+                T1[j, i] = self.B[j, wi] + p[k]  # Emission probability * path probability
+                T2[j, i] = k  # Path index
 
-        # Find the best cell in the last column
-        t_max = 0
-        vit_max = 0
-        for t in range(m):
-            if viterbi[t, n - 1] > vit_max:
-                t_max = t
-                vit_max = viterbi[t, n - 1]
+        # Retrace path through memoization structure from highest probability end state
+        X = np.zeros(len(w))
+        z = np.argmax(T1[:, -1])
+        X[-1] = z
+        for i in range(len(w) - 2, -1, -1):
+            z = T2[z, i]
+            X[i] = z
 
-        # Unpack the path of tags through the trellis
-        i = n - 1
-        tags = []
-        while i >= 0:
-            tag = [t for t in self.ti if self.ti[t] == t_max][0]
-            tags.append(tag)
-            t_max = path[t_max, i]
-            i -= 1
-
-        return list(reversed(tags))
+        # Return the tags for the states
+        return [self.state_index[x] for x in X]
 
 
 if __name__ == "__main__":
