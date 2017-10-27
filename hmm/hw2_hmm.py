@@ -125,10 +125,11 @@ class HMM:
         for t0 in p:
             self.PI[reverse_state_index[t0]] += p[t0]
 
-        # Laplacian smoothing
-        # self.PI += 1
         self.PI /= sum(self.PI)
+        zero = self.PI == 0
+        self.PI[zero] = 1
         self.PI = np.log(self.PI)
+        self.PI[zero] = -np.inf
 
         # Compute the transition probabilities
         for t0 in a:
@@ -150,11 +151,12 @@ class HMM:
                 i = reverse_state_index[t]
                 self.B[i, j] += b[w][t]
 
-        # Laplacian smoothing
-        # self.B += 1
         for i in range(self.K):
             self.B[i, :] /= sum(self.B[i, :])
+        zero = self.B == 0
+        self.B[zero] = 1
         self.B = np.log(self.B)
+        self.B[zero] = -np.inf
 
 
     def test(self, testFile, outFile):
