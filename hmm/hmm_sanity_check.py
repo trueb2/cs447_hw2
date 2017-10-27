@@ -37,8 +37,8 @@ if __name__ == "__main__":
         print("Sanity-checking HMM evaluation implementation...")
 
         # HMM-eval test script
-        goldFile = "gold.txt"
-        outFile = "out.txt" # test script runs on out.txt, the predicted tags from your HMM
+        goldFile = "../data/gold.txt"
+        outFile = "../data/out.txt" # test script runs on out.txt, the predicted tags from your HMM
         # Get your Eval object, assuming both files exist
         eval = ev.Eval(goldFile, outFile)
         tokenAcc = eval.getTokenAccuracy()
