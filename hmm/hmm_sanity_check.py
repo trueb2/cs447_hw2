@@ -15,7 +15,7 @@ if __name__ == "__main__":
         print("---")
         print("Sanity-checking HMM implementation...")
         # Import your solution
-        from hmm import hw2_hmm as hmm, hw2_eval_hmm as ev
+        import hw2_hmm as hmm, hw2_eval_hmm as ev
 
         # Get your HMM
         myHMM = hmm.HMM(4) # set UNK threshold to 4, rather than default 5
