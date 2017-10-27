@@ -5,7 +5,6 @@ from collections import defaultdict
 import numpy as np
 import heapq
 
-
 # Read a text file into a corpus (list of sentences (which in turn are lists of words))
 # (taken from nested section of HW0)
 def readFileToCorpus(f):
@@ -98,14 +97,14 @@ class PMI:
             if i % 500 == 0 and i != 0:
                 print("Evaluating word pair number ", i)
             w1 = words[i]
-            for j in range(i + 1, len(words)):
+            for j in range(i+1, len(words)):
                 w2 = words[j]
                 if w2 not in self.WC[w1]:
                     continue
                 if len(heap) < N:
-                    heapq.heappush(heap, (self.getPMI(w1, w2), w1, w2))
+                    heapq.heappush(heap, (self.getPMI(w1,w2), w1, w2))
                 else:
-                    heapq.heappushpop(heap, (self.getPMI(w1, w2), w1, w2))
+                    heapq.heappushpop(heap, (self.getPMI(w1,w2),w1,w2))
 
         return list(reversed(sorted(heap)))
 
@@ -139,7 +138,7 @@ class PMI:
 # The main routine
 # -------------------------------------------
 if __name__ == "__main__":
-    corpus = readFileToCorpus('../data/movies.txt')
+    corpus = readFileToCorpus('./movies.txt')
     pmi = PMI(corpus)
     lv_pmi = pmi.getPMI("luke", "vader")
     print("  PMI of \"luke\" and \"vader\": %f" % lv_pmi)

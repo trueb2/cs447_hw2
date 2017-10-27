@@ -1,0 +1,25 @@
+PMI README
+
+When I construct a PMI object, I store N as the number of sentences in the corpus. I create a dict that maps
+a word to the number of times that it occurs. I create a dict that maps a word to a dict that maps
+the a word to the number of times it occurs. This dict is the co-occurrence dict.
+
+In getPMI I get the number of occurrences of each word from the first dict I mentioned. I check to
+see if the words are unseen, which I have decided not to handle so I throw an exception. Next, I look up
+the number of co-occurrences for the word bigram. I calculate the PMI without directly calculating
+the probabilities from the counts, so that there are fewer multiplications (N is multiplied through one
+time instead of divided twice and multiplied once). I return the PMI or negative infinity if the bigram is
+unseen.
+
+getVocabulary, returns [w for w in self.W if self.W[w] >= k], which is simple.
+
+For getPairsWithMaximumPMI, I remove redundant words and sort in ascending order. I don't visit word
+pairs where the first is greater than the second. I skip word pairs that did not occur. I maintain a heap
+of <= N word pairs as a tuple that is sorted by the first element, so it's not very much code. When the heap
+is of size N, we push a pair and pop the lowest priority pair simultaneously. I sort and reverse the heap
+before returning it.
+
+writePairsToFile writes the (pmiValue, word1, word2) tuples to a file
+
+In the main routine, I get the maximum PMI pairs for k in 2, 5, 10, 50, 100, and 200.
+It takes about 80 seconds on EWS and about 105 seconds on my mac.
